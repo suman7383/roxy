@@ -15,6 +15,13 @@ type Backend struct {
 	healthy bool
 }
 
+func NewBackend(url *url.URL, healthy bool) *Backend {
+	return &Backend{
+		URL:     url,
+		healthy: healthy,
+	}
+}
+
 func (b *Backend) Healthy() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
