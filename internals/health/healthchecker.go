@@ -102,12 +102,14 @@ func probe(
 		nil,
 	)
 	if err != nil {
+		// fmt.Printf("Failed to create request for backend %s: %v\n", backend.URL.Host, err)
 		backend.SetHealthy(false)
 		return
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
+		// fmt.Printf("Health check request failed for backend %s: %v\n", backend.URL.Host, err)
 		backend.SetHealthy(false)
 		return
 	}
@@ -115,6 +117,7 @@ func probe(
 
 	if resp.StatusCode != http.StatusOK {
 		// TODO: Maybe log the status code for debugging purposes
+		// fmt.Printf("Health check failed for backend %s: received status code %d\n", backend.URL.Host, resp.StatusCode)
 		backend.SetHealthy(false)
 		return
 	}
