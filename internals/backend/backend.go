@@ -29,6 +29,13 @@ func (b *Backend) Healthy() bool {
 	return b.healthy
 }
 
+func (b *Backend) SetHealthy(healthy bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.healthy = healthy
+}
+
 type BackendPool struct {
 	pool []*Backend
 
@@ -75,4 +82,8 @@ func (bp *BackendPool) Next() (*Backend, error) {
 	}
 
 	return nil, ErrNoHealthyBackend
+}
+
+func (bp *BackendPool) Pool() []*Backend {
+	return bp.pool
 }
