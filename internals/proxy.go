@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httputil"
+	"time"
 
 	"github.com/suman7383/roxy/internals/backend"
 )
@@ -17,9 +18,11 @@ const (
 type Proxy struct {
 	pool *backend.BackendPool
 	rp   *httputil.ReverseProxy
+
+	timeout time.Duration
 }
 
-func NewProxy(pool *backend.BackendPool) *Proxy {
+func NewProxy(pool *backend.BackendPool, timeout time.Duration) *Proxy {
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			// backend is guaranteed to be non-nil here because we set it in ServeHTTP
@@ -27,10 +30,18 @@ func NewProxy(pool *backend.BackendPool) *Proxy {
 			backend := pr.Out.Context().Value(backendCtxKey).(*backend.Backend)
 			pr.SetURL(backend.URL)
 		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if r.Context().Err() == context.DeadlineExceeded {
+				w.WriteHeader(http.StatusGatewayTimeout)
+			} else {
+				w.WriteHeader(http.StatusBadGateway)
+			}
+		},
 	}
 	return &Proxy{
-		pool: pool,
-		rp:   rp,
+		pool:    pool,
+		rp:      rp,
+		timeout: timeout,
 	}
 }
 
@@ -47,7 +58,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), p.timeout)
+	defer cancel()
+
 	ctx = context.WithValue(ctx, backendCtxKey, be)
 	r = r.WithContext(ctx)
 	p.rp.ServeHTTP(w, r)
