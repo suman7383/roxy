@@ -6,12 +6,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/suman7383/roxy/internals/backend"
 )
 
 const healthy = true
 const unhealthy = false
+const defaultTimeout = 2 * time.Second
 
 func upstreamHandler(t *testing.T, name string, healthy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +62,7 @@ func TestProxy_ForwardsRequestToHealthyBackend(t *testing.T) {
 		t.Fatalf("Failed to create backend pool: %v", err)
 	}
 
-	proxy := NewProxy(pool)
+	proxy := NewProxy(pool, defaultTimeout)
 
 	proxyServer := httptest.NewTestServer(t, proxy)
 	proxyServer.Start()
@@ -121,7 +123,7 @@ func TestProxy_DistributesRequestRoundRobin(t *testing.T) {
 		t.Fatalf("Failed to create backend pool: %v", err)
 	}
 
-	proxy := NewProxy(pool)
+	proxy := NewProxy(pool, defaultTimeout)
 
 	proxyServer := httptest.NewTestServer(t, proxy)
 	proxyServer.Start()
@@ -171,7 +173,7 @@ func TestProxy_ReturnsServiceUnavailableWhenNoHealthyBackends(t *testing.T) {
 		t.Fatalf("Failed to create backend pool: %v", err)
 	}
 
-	proxy := NewProxy(pool)
+	proxy := NewProxy(pool, defaultTimeout)
 
 	proxyServer := httptest.NewTestServer(t, proxy)
 	proxyServer.Start()
@@ -226,7 +228,7 @@ func TestProxy_ForwardsUpstreamInternalServerError(t *testing.T) {
 		t.Fatalf("Failed to create backend pool: %v", err)
 	}
 
-	proxy := NewProxy(pool)
+	proxy := NewProxy(pool, defaultTimeout)
 
 	proxyServer := httptest.NewTestServer(t, proxy)
 	proxyServer.Start()
@@ -279,7 +281,7 @@ func TestProxy_ReturnsBadGatewayWhenUpstreamUnreachable(t *testing.T) {
 		t.Fatalf("Failed to create backend pool: %v", err)
 	}
 
-	proxy := NewProxy(pool)
+	proxy := NewProxy(pool, defaultTimeout)
 
 	proxyServer := httptest.NewTestServer(t, proxy)
 	proxyServer.Start()
@@ -293,5 +295,51 @@ func TestProxy_ReturnsBadGatewayWhenUpstreamUnreachable(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Errorf("Expected status code 502, got %d", resp.StatusCode)
+	}
+}
+
+func TestProxy_ReturnsGatewayTimeoutWhenUpstreamExceedsTimeout(t *testing.T) {
+	upstream := httptest.NewTestServer(
+		t,
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t := time.NewTimer(500 * time.Millisecond)
+
+			<-t.C
+
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	upstream.Start()
+	defer upstream.Close()
+
+	url, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("Failed to parse upstream URL: %v", err)
+	}
+
+	be := []*backend.Backend{
+		backend.NewBackend(url, true),
+	}
+
+	pool, err := backend.NewBackendPool(be)
+	if err != nil {
+		t.Fatalf("Failed to create backend pool: %v", err)
+	}
+
+	proxy := NewProxy(pool, 100*time.Millisecond)
+	proxyServer := httptest.NewTestServer(t, proxy)
+	proxyServer.Start()
+	defer proxyServer.Close()
+
+	resp, err := http.Get(proxyServer.URL)
+	if err != nil {
+		t.Fatalf("Failed to make request to proxy: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusGatewayTimeout {
+		t.Errorf("Expected status code 504, got %d", resp.StatusCode)
 	}
 }
