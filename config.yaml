@@ -1,0 +1,9 @@
+# This is an example of a config file
+listen_addr: ":8080"
+backends:
+  - "http://localhost:8081"
+  - "http://localhost:8082"
+
+request_timeout: 5s
+health_check_interval: 10s
+health_check_timeout: 2s
