@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	defaultListenAddr = ":8080"
-
+	defaultListenAddr          = ":8080"
 	defaultRequestTimeout      = 5 * time.Second
 	defaultHealthCheckInterval = 10 * time.Second
 	defaultHealthCheckTimeout  = 2 * time.Second
@@ -94,5 +93,4 @@ func (c *Config) LoadDefaults() {
 	c.RequestTimeout = defaultRequestTimeout
 	c.HealthCheckInterval = defaultHealthCheckInterval
 	c.HealthCheckTimeout = defaultHealthCheckTimeout
-
 }
